@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, request } from './api';
 
 export const clientsService = {
   async getClients(filters = {}) {
@@ -23,7 +23,10 @@ export const clientsService = {
     return api.put(`/clients/${id}`, clientData);
   },
 
-  async deleteClient(id) {
-    return api.delete(`/clients/${id}`);
+  async deleteClient(id, password) {
+    return request(`/clients/${id}`, {
+      method: 'DELETE',
+      headers: { 'X-Admin-Password': password },
+    });
   },
 };

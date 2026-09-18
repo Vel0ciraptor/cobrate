@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserPlus, Search, Filter, Eye, Edit2, DollarSign, Trash2, CheckCircle2, FileSpreadsheet } from 'lucide-react';
 import ClientTable from '../components/ClientTable';
+import ConfirmPasswordModal from '../components/ConfirmPasswordModal';
 import { clientsService } from '../services/clients';
 import { formatCurrency } from '../utils/formatters';
 import { exportClientsToCSV } from '../utils/exportUtils';
@@ -11,6 +12,7 @@ export default function Clients({ onPayClient, onEditClient, onNewClient, onView
   const [activeFilter, setActiveFilter] = useState('true'); // 'true', 'false', 'all'
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [deleteModal, setDeleteModal] = useState({ open: false, client: null, loading: false, error: '' });
 
   const loadClients = async () => {
     try {
@@ -37,14 +39,25 @@ export default function Clients({ onPayClient, onEditClient, onNewClient, onView
     loadClients();
   };
 
-  const handleDeactivate = async (client) => {
-    if (window.confirm(`¿Estás seguro de desactivar a "${client.name}"? Sus pagos históricos se conservarán intactos.`)) {
-      try {
-        await clientsService.deleteClient(client.id);
-        loadClients();
-      } catch (err) {
-        alert('Error al desactivar cliente: ' + err.message);
-      }
+  const handleDeleteClick = (client) => {
+    setDeleteModal({ open: true, client, loading: false, error: '' });
+  };
+
+  const handleDeleteConfirm = async (password) => {
+    const client = deleteModal.client;
+    setDeleteModal(prev => ({ ...prev, loading: true, error: '' }));
+    try {
+      await clientsService.deleteClient(client.id, password);
+      setDeleteModal({ open: false, client: null, loading: false, error: '' });
+      loadClients();
+    } catch (err) {
+      setDeleteModal(prev => ({ ...prev, loading: false, error: err.message || 'Error al eliminar cliente' }));
+    }
+  };
+
+  const handleDeleteClose = () => {
+    if (!deleteModal.loading) {
+      setDeleteModal({ open: false, client: null, loading: false, error: '' });
     }
   };
 
@@ -157,7 +170,17 @@ export default function Clients({ onPayClient, onEditClient, onNewClient, onView
         onPay={onPayClient}
         onEdit={onEditClient}
         onView={onViewClient}
+        onDelete={handleDeleteClick}
         emptyMessage="No se encontraron clientes con los filtros seleccionados."
+      />
+
+      {/* Password Confirmation Modal */}
+      <ConfirmPasswordModal
+        isOpen={deleteModal.open}
+        onClose={handleDeleteClose}
+        onConfirm={handleDeleteConfirm}
+        loading={deleteModal.loading}
+        error={deleteModal.error}
       />
     </div>
   );

@@ -1,4 +1,5 @@
 const db = require('../db');
+const bcrypt = require('bcryptjs');
 const { calculateClientFinances } = require('../services/debtService');
 const { calculateNextPaymentDate, formatDateToISO } = require('../services/dateService');
 
@@ -251,25 +252,66 @@ async function updateClient(req, res) {
 }
 
 /**
- * Desactivar cliente (Soft delete)
+ * Eliminar cliente con verificación de contraseña de administrador
  */
 async function deleteClient(req, res) {
   try {
     const { id } = req.params;
+    const password = req.headers['x-admin-password'] || req.body?.password;
 
-    // Verificar cliente
+    // 1. Validar que se haya enviado la contraseña
+    if (!password || !String(password).trim()) {
+      return res.status(400).json({ error: 'Debes ingresar tu contraseña de administrador para autorizar la eliminación.' });
+    }
+
+    // 2. Verificar que el usuario autenticado tenga un ID válido
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ error: 'Sesión de administrador no válida. Inicia sesión nuevamente.' });
+    }
+
+    // 3. Verificar existencia del cliente
     const clientRes = await db.query('SELECT * FROM clients WHERE id = $1', [id]);
     if (clientRes.rows.length === 0) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
+    const clientToDelete = clientRes.rows[0];
 
-    // Regla 7: No eliminar físicamente si existen pagos, realizar soft delete (active = false)
-    await db.query('UPDATE clients SET active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [id]);
+    // 4. Verificar la contraseña del administrador actual
+    const userRes = await db.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
+    if (userRes.rows.length === 0) {
+      return res.status(401).json({ error: 'Usuario administrador no válido' });
+    }
 
-    return res.json({ message: 'Cliente desactivado correctamente', id, active: false });
+    const passwordHash = userRes.rows[0].password_hash;
+    if (!passwordHash) {
+      return res.status(500).json({ error: 'El usuario administrador no tiene contraseña configurada' });
+    }
+
+    const isMatch = await bcrypt.compare(String(password).trim(), passwordHash);
+    if (!isMatch) {
+      return res.status(403).json({ error: 'Contraseña incorrecta. No se autorizó la eliminación del cliente.' });
+    }
+
+    // 5. Eliminación atómica segura mediante transacción
+    const clientTx = await db.getTransactionClient();
+    try {
+      // Eliminar registros de pagos del cliente
+      await clientTx.query('DELETE FROM payments WHERE client_id = $1', [id]);
+      // Eliminar el registro del cliente
+      await clientTx.query('DELETE FROM clients WHERE id = $1', [id]);
+      await clientTx.commit();
+    } catch (txErr) {
+      await clientTx.rollback();
+      throw txErr;
+    }
+
+    return res.json({
+      message: `Cliente "${clientToDelete.name}" eliminado correctamente`,
+      id,
+    });
   } catch (err) {
-    console.error('Error al desactivar cliente:', err);
-    return res.status(500).json({ error: 'Error al desactivar cliente' });
+    console.error('Error al eliminar cliente:', err);
+    return res.status(500).json({ error: 'Error interno al eliminar el cliente' });
   }
 }
 

@@ -1,13 +1,14 @@
 import React from 'react';
 import StatusBadge from './StatusBadge';
 import { formatCurrency, formatDate, formatFrequency, getFrequencyDayLabel } from '../utils/formatters';
-import { Eye, Edit2, DollarSign, Phone, MessageSquare, Calendar, AlertCircle } from 'lucide-react';
+import { Eye, Edit2, DollarSign, Phone, MessageSquare, Calendar, AlertCircle, Trash2 } from 'lucide-react';
 
 export default function ClientTable({
   clients = [],
   onPay,
   onEdit,
   onView,
+  onDelete,
   emptyMessage = 'No se encontraron clientes',
 }) {
   if (clients.length === 0) {
@@ -162,6 +163,15 @@ export default function ClientTable({
                         style={{ padding: '6px' }}
                       >
                         <Edit2 size={15} />
+                      </button>
+
+                      <button
+                        onClick={() => onDelete && onDelete(client)}
+                        className="btn btn-danger btn-icon"
+                        title="Eliminar cliente"
+                        style={{ padding: '6px' }}
+                      >
+                        <Trash2 size={15} />
                       </button>
                     </div>
                   </td>
@@ -327,6 +337,15 @@ export default function ClientTable({
                   title="Editar"
                 >
                   <Edit2 size={16} />
+                </button>
+
+                <button
+                  onClick={() => onDelete && onDelete(client)}
+                  className="btn btn-danger btn-icon"
+                  style={{ padding: '8px' }}
+                  title="Eliminar"
+                >
+                  <Trash2 size={16} />
                 </button>
               </div>
             </div>
